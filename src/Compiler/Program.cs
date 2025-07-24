@@ -244,7 +244,7 @@ public class Parser
             return ConsumeToken();
 
         _diagnostics.Add(
-            $"[ERROR] Unexpected token <{_current.Kind}> at position {_current.Position}, expected <{SyntaxKind.NumberToken}>."
+            $"[ERROR] Unexpected token <{_current.Kind}> at position {_current.Position}, expected <{kind}>."
         );
         return new SyntaxToken(kind, _current.Position, null!, null!);
     }
