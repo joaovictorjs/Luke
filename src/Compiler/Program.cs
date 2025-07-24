@@ -12,24 +12,25 @@ public static class Program
             var line = Console.ReadLine() ?? string.Empty;
             var parser = new Parser(line);
 
-            ExpressionSyntax expressionSyntax = parser.Parse();
+            SyntaxTree syntaxTree = parser.Parse();
 
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            PrettyPrint(expressionSyntax);
+            PrettyPrint(syntaxTree.Root);
 
             Console.WriteLine();
 
-            if (parser.Diagnostics.Any())
+            if (syntaxTree.Diagnostics.Any())
             {
                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                foreach (var item in parser.Diagnostics)
+                foreach (var item in syntaxTree.Diagnostics)
                 {
                     Console.WriteLine(item);
                 }
+
+                Console.WriteLine();
             }
 
             Console.ResetColor();
-            Console.WriteLine();
         }
     }
 
@@ -148,6 +149,17 @@ public class SyntaxToken : SyntaxNode
     public override IEnumerable<SyntaxNode> GetChildren() => Enumerable.Empty<SyntaxNode>();
 }
 
+public sealed class SyntaxTree(
+    IReadOnlyList<string> diagnostics,
+    ExpressionSyntax root,
+    SyntaxToken EOFToken
+)
+{
+    public IReadOnlyList<string> Diagnostics { get; } = diagnostics;
+    public ExpressionSyntax Root { get; } = root;
+    public SyntaxToken EOFToken { get; } = EOFToken;
+}
+
 public enum SyntaxKind
 {
     NumberToken,
@@ -255,7 +267,14 @@ public class Parser
         return new NumberExpressionSyntax(numberToken);
     }
 
-    public ExpressionSyntax Parse()
+    public SyntaxTree Parse()
+    {
+        var expression = ParseExpression();
+        var EOFToken = Match(SyntaxKind.EOFToken);
+        return new SyntaxTree(_diagnostics, expression, EOFToken);
+    }
+
+    private ExpressionSyntax ParseExpression()
     {
         var left = ParsePrimaryExpression();
 
