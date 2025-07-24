@@ -278,7 +278,12 @@ public class Parser
     {
         var left = ParsePrimaryExpression();
 
-        while (_current.Kind == SyntaxKind.PlusToken || _current.Kind == SyntaxKind.MinusToken)
+        while (
+            _current.Kind == SyntaxKind.PlusToken
+            || _current.Kind == SyntaxKind.MinusToken
+            || _current.Kind == SyntaxKind.StarToken
+            || _current.Kind == SyntaxKind.SlashToken
+        )
         {
             var operatorToken = ConsumeToken();
             var right = ParsePrimaryExpression();
