@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Data;
 using System.Linq.Expressions;
 
 public static class Program
@@ -8,25 +9,25 @@ public static class Program
         while (true)
         {
             Console.Write("> ");
-
             var line = Console.ReadLine() ?? string.Empty;
             var parser = new Parser(line);
-
             SyntaxTree syntaxTree = parser.Parse();
-
             Console.ForegroundColor = ConsoleColor.DarkGray;
             PrettyPrint(syntaxTree.Root);
-
             Console.WriteLine();
 
-            if (syntaxTree.Diagnostics.Any())
+            if (!syntaxTree.Diagnostics.Any())
+            {
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                var evaluator = new Evaluator(syntaxTree.Root);
+                Console.WriteLine(evaluator.Evaluate());
+                Console.WriteLine();
+            }
+            else
             {
                 Console.ForegroundColor = ConsoleColor.DarkRed;
                 foreach (var item in syntaxTree.Diagnostics)
-                {
                     Console.WriteLine(item);
-                }
-
                 Console.WriteLine();
             }
 
@@ -86,7 +87,12 @@ public class Lexer
 
             var length = _position - start;
             var value = _text.Substring(start, length);
-            _ = int.TryParse(value, out var intValue);
+
+            if (!int.TryParse(value, out var intValue))
+                _diagnostics.Add(
+                    $"[ERROR] The value {value} at position {start} is not a valid Int32."
+                );
+
             return new SyntaxToken(SyntaxKind.NumberToken, start, value, intValue);
         }
 
@@ -261,29 +267,32 @@ public class Parser
         return new SyntaxToken(kind, _current.Position, null!, null!);
     }
 
-    private ExpressionSyntax ParsePrimaryExpression()
-    {
-        var numberToken = Match(SyntaxKind.NumberToken);
-        return new NumberExpressionSyntax(numberToken);
-    }
-
     public SyntaxTree Parse()
     {
-        var expression = ParseExpression();
+        var expression = ParseTerm();
         var EOFToken = Match(SyntaxKind.EOFToken);
         return new SyntaxTree(_diagnostics, expression, EOFToken);
     }
 
-    private ExpressionSyntax ParseExpression()
+    private ExpressionSyntax ParseTerm()
+    {
+        var left = ParseFactor();
+
+        while (_current.Kind == SyntaxKind.PlusToken || _current.Kind == SyntaxKind.MinusToken)
+        {
+            var operatorToken = ConsumeToken();
+            var right = ParseFactor();
+            left = new BinaryExpressionSyntax(left, operatorToken, right);
+        }
+
+        return left;
+    }
+
+    private ExpressionSyntax ParseFactor()
     {
         var left = ParsePrimaryExpression();
 
-        while (
-            _current.Kind == SyntaxKind.PlusToken
-            || _current.Kind == SyntaxKind.MinusToken
-            || _current.Kind == SyntaxKind.StarToken
-            || _current.Kind == SyntaxKind.SlashToken
-        )
+        while (_current.Kind == SyntaxKind.StarToken || _current.Kind == SyntaxKind.SlashToken)
         {
             var operatorToken = ConsumeToken();
             var right = ParsePrimaryExpression();
@@ -291,5 +300,41 @@ public class Parser
         }
 
         return left;
+    }
+
+    private ExpressionSyntax ParsePrimaryExpression()
+    {
+        var numberToken = Match(SyntaxKind.NumberToken);
+        return new NumberExpressionSyntax(numberToken);
+    }
+}
+
+public class Evaluator(ExpressionSyntax root)
+{
+    public int Evaluate() => EvaluateExpression(root);
+
+    private int EvaluateExpression(ExpressionSyntax node)
+    {
+        if (node is NumberExpressionSyntax numberExpression)
+            return (int)numberExpression.NumberToken.Value;
+
+        if (node is BinaryExpressionSyntax binaryExpression)
+        {
+            var left = EvaluateExpression(binaryExpression.Left);
+            var right = EvaluateExpression(binaryExpression.Right);
+
+            return binaryExpression.OperatorToken.Kind switch
+            {
+                SyntaxKind.PlusToken => left + right,
+                SyntaxKind.MinusToken => left - right,
+                SyntaxKind.StarToken => left * right,
+                SyntaxKind.SlashToken => left / right,
+                _ => throw new Exception(
+                    $"Unexpected operator <{binaryExpression.OperatorToken.Kind}>."
+                ),
+            };
+        }
+
+        throw new Exception($"Unexpected expression <{node.Kind}>.");
     }
 }
