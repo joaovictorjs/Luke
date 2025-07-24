@@ -180,6 +180,7 @@ public enum SyntaxKind
     EOFToken,
     BinaryExpression,
     NumberExpression,
+    ParenthesizedExpression,
 }
 
 public abstract class ExpressionSyntax : SyntaxNode { }
@@ -212,6 +213,24 @@ public class BinaryExpressionSyntax(
         yield return Left;
         yield return OperatorToken;
         yield return Right;
+    }
+}
+
+public sealed class ParenthesizedExpressionSyntax(
+    SyntaxToken openParenthesisToken,
+    ExpressionSyntax expression,
+    SyntaxToken closeParenthesisToken
+) : ExpressionSyntax
+{
+    public override SyntaxKind Kind => SyntaxKind.ParenthesizedExpression;
+
+    public ExpressionSyntax Expression { get; } = expression;
+
+    public override IEnumerable<SyntaxNode> GetChildren()
+    {
+        yield return openParenthesisToken;
+        yield return Expression;
+        yield return closeParenthesisToken;
     }
 }
 
@@ -304,6 +323,14 @@ public class Parser
 
     private ExpressionSyntax ParsePrimaryExpression()
     {
+        if (_current.Kind == SyntaxKind.OpenParenthesisToken)
+        {
+            var open = ConsumeToken();
+            var expression = ParseTerm();
+            var close = Match(SyntaxKind.CloseParenthesisToken);
+            return new ParenthesizedExpressionSyntax(open, expression, close);
+        }
+
         var numberToken = Match(SyntaxKind.NumberToken);
         return new NumberExpressionSyntax(numberToken);
     }
@@ -334,6 +361,9 @@ public class Evaluator(ExpressionSyntax root)
                 ),
             };
         }
+
+        if (node is ParenthesizedExpressionSyntax parenthesizedExpression)
+            return EvaluateExpression(parenthesizedExpression.Expression);
 
         throw new Exception($"Unexpected expression <{node.Kind}>.");
     }
